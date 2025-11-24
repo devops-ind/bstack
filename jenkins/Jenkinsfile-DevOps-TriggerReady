@@ -1,8 +1,15 @@
 // Jenkinsfile for DevOps Jenkins
 // Triggered by App Build Pipeline from Dev Jenkins
 // Purpose: BrowserStack artifact upload automation
-
-@Library('shared-library') _
+//
+// This Jenkinsfile orchestrates the BrowserStack uploader which:
+// 1. Validates input parameters
+// 2. Checks artifact files exist and are valid
+// 3. Uploads artifacts to BrowserStack
+// 4. Updates YAML configuration files in Git
+// 5. Creates pull requests in GitHub
+// 6. Sends Teams notifications
+// 7. Creates audit trails
 
 pipeline {
     agent {
@@ -127,8 +134,8 @@ pipeline {
                                 sh '''
                                     mkdir -p ${DEVOPS_REPO_DIR}
                                     cd ${DEVOPS_REPO_DIR}
-                                    # Replace with your actual DevOps repo URL
-                                    git clone https://github.com/your-org/devops-automation.git .
+                                    # Clone the bstack repository (configure your fork/org in Jenkins credentials)
+                                    git clone https://github.com/devops-ind/bstack.git .
                                 '''
                             }
                         }
@@ -173,14 +180,21 @@ pipeline {
                     sh '''
                         cd ${DEVOPS_REPO_DIR}
                         source venv/bin/activate
-                        
-                        # Validate config.yaml syntax
-                        python3 -c "import yaml; yaml.safe_load(open('config.yaml'))"
-                        echo "✅ config.yaml is valid"
+
+                        # Validate config.yaml syntax and load configuration
+                        python3 -c "
+import sys
+sys.path.insert(0, 'src')
+from config import Config
+config = Config('config/config.yaml')
+print('✅ config/config.yaml is valid and loaded successfully')
+                        "
                         
                         # Verify all required Python modules exist
                         python3 -c "
-from browserstack_uploader import BrowserStackUploader
+import sys
+sys.path.insert(0, 'src')
+from main import BrowserStackUploader
 print('✅ All modules imported successfully')
                         "
                     '''
@@ -197,9 +211,9 @@ print('✅ All modules imported successfully')
                     sh '''
                         cd ${DEVOPS_REPO_DIR}
                         source venv/bin/activate
-                        
+
                         # Run the uploader with parameters from Dev Jenkins
-                        python3 browserstack-uploader.py \
+                        python3 src/main.py \
                             --platform "${PLATFORM}" \
                             --environment "${ENVIRONMENT}" \
                             --build-type "${BUILD_TYPE}" \
@@ -207,10 +221,10 @@ print('✅ All modules imported successfully')
                             --version "${VERSION}" \
                             --build-id "${BUILD_ID}" \
                             --source-build-url "${SOURCE_BUILD_URL}" \
-                            --config-file config.yaml \
+                            --config-file config/config.yaml \
                             --output-file upload-result.json \
                             --verbose
-                        
+
                         echo "✅ Upload completed"
                     '''
                 }

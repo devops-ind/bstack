@@ -1,9 +1,22 @@
+// Jenkinsfile for Standard Docker Setup
+// Alternative pipeline for simpler Docker-based deployments
+// Can be triggered by App Build Pipeline or manually with parameters
+//
+// This Jenkinsfile orchestrates the BrowserStack uploader which:
+// 1. Validates input parameters
+// 2. Checks artifact files exist and are valid
+// 3. Uploads artifacts to BrowserStack
+// 4. Updates YAML configuration files in Git
+// 5. Creates pull requests in GitHub
+// 6. Sends Teams notifications
+// 7. Creates audit trails
+
 pipeline {
     agent {
-        // Use standard Docker agent instead of Kubernetes
+        // Use standard Docker agent (no special features needed)
         docker {
             image 'python:3.11-slim'
-            args '-v /shared:/shared:ro -v /var/run/docker.sock:/var/run/docker.sock'
+            args '-v /shared:/shared:ro'
             reuseNode true
         }
     }
@@ -54,57 +67,63 @@ pipeline {
     }
 
     environment {
-        // Credentials (set in Jenkins Credentials Manager)
+        // Credentials (configure in Jenkins Credentials Manager)
         BROWSERSTACK_USER = credentials('browserstack-user')
         BROWSERSTACK_ACCESS_KEY = credentials('browserstack-access-key')
         GITHUB_TOKEN = credentials('github-token')
         TEAMS_WEBHOOK_URL = credentials('teams-webhook-url')
-        
+
         // Paths
-        DEVOPS_REPO = '/tmp/devops-browserstack-automation'
-        WORKSPACE_ROOT = "${WORKSPACE}"
-        ARTIFACT_BASE = '/shared/mobileapp/builds/mainline'
+        DEVOPS_REPO = "${WORKSPACE}/bstack"
+        CONFIG_FILE = "${WORKSPACE}/bstack/config/config.yaml"
     }
 
     stages {
         stage('Prepare') {
             steps {
                 script {
-                    echo "════════════════════════════════════════════"
+                    echo "════════════════════════════════════════════════════════"
                     echo "BrowserStack Artifact Upload Automation"
-                    echo "════════════════════════════════════════════"
+                    echo "════════════════════════════════════════════════════════"
                     echo ""
-                    echo "Parameters:"
-                    echo "  Platform:      ${params.PLATFORM}"
-                    echo "  Environment:   ${params.ENVIRONMENT}"
-                    echo "  Build Type:    ${params.BUILD_TYPE}"
-                    echo "  App Variant:   ${params.APP_VARIANT}"
-                    echo "  Version:       ${params.VERSION}"
-                    echo "  Build ID:      ${params.BUILD_ID}"
-                    echo "  Source Build:  ${params.SOURCE_BUILD_URL}"
+                    echo "📋 Parameters:"
+                    echo "   Platform:      ${params.PLATFORM}"
+                    echo "   Environment:   ${params.ENVIRONMENT}"
+                    echo "   Build Type:    ${params.BUILD_TYPE}"
+                    echo "   App Variant:   ${params.APP_VARIANT}"
+                    echo "   Version:       ${params.VERSION}"
+                    echo "   Build ID:      ${params.BUILD_ID}"
+                    echo "   Source Build:  ${params.SOURCE_BUILD_URL}"
                     echo ""
-                    echo "Workspace: ${WORKSPACE_ROOT}"
-                    echo "Build: ${BUILD_NUMBER}"
                 }
             }
         }
 
-        stage('Checkout DevOps Scripts') {
+        stage('Checkout Repository') {
             steps {
                 script {
+                    echo "📦 STAGE: Checkout Repository"
+                    echo "════════════════════════════════════════════════════════"
+
                     sh '''
-                        echo "Checking out DevOps scripts..."
-                        rm -rf ${DEVOPS_REPO}
-                        mkdir -p ${DEVOPS_REPO}
-                        cd ${DEVOPS_REPO}
-                        
-                        # Clone the DevOps automation scripts
-                        git clone https://github.com/your-org/devops-browserstack-automation.git .
-                        
-                        echo "✓ DevOps scripts checked out"
+                        # Clone or update the bstack repository
+                        if [ -d "${DEVOPS_REPO}/.git" ]; then
+                            echo "Updating existing repository..."
+                            cd ${DEVOPS_REPO}
+                            git fetch origin
+                            git checkout main
+                            git pull origin main
+                        else
+                            echo "Cloning bstack repository..."
+                            rm -rf ${DEVOPS_REPO}
+                            mkdir -p ${DEVOPS_REPO}
+                            git clone https://github.com/devops-ind/bstack.git ${DEVOPS_REPO}
+                        fi
+
+                        echo "✅ Repository ready"
                         echo ""
-                        echo "Contents:"
-                        ls -la
+                        echo "Repository structure:"
+                        ls -la ${DEVOPS_REPO} | head -20
                     '''
                 }
             }
@@ -113,23 +132,80 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
+                    echo "🐍 STAGE: Install Dependencies"
+                    echo "════════════════════════════════════════════════════════"
+
                     sh '''
-                        echo "Installing Python dependencies..."
                         cd ${DEVOPS_REPO}
-                        
-                        # Upgrade pip
-                        pip install --no-cache-dir -q --upgrade pip
-                        
-                        # Install dependencies
-                        pip install --no-cache-dir -q -r requirements.txt
-                        
+
+                        # Create virtual environment
+                        python3 -m venv venv
+                        source venv/bin/activate
+
+                        # Upgrade pip and install dependencies
+                        pip install --upgrade pip > /dev/null 2>&1
+                        pip install -r requirements.txt
+
                         # Verify installations
-                        echo "✓ Verifying installations..."
-                        python3 -c "import yaml; import requests; import git; print('✓ All dependencies installed successfully')"
-                        
+                        echo "✅ Verifying installations..."
+                        python3 -c "
+import yaml
+import requests
+print('✅ All required packages installed:')
+print('   - PyYAML')
+print('   - requests')
+print('   - GitPython')
+                        "
                         echo ""
                         python3 --version
-                        pip list | grep -E "PyYAML|requests|GitPython"
+                    '''
+                }
+            }
+        }
+
+        stage('Validate Configuration') {
+            steps {
+                script {
+                    echo "⚙️  STAGE: Validate Configuration"
+                    echo "════════════════════════════════════════════════════════"
+
+                    sh '''
+                        cd ${DEVOPS_REPO}
+                        source venv/bin/activate
+
+                        # Validate configuration file
+                        python3 -c "
+import sys
+sys.path.insert(0, 'src')
+from config import Config
+
+try:
+    config = Config('config/config.yaml')
+    print('✅ Configuration file is valid')
+    print('')
+    print('BrowserStack API timeout: ' + str(config.get('browserstack.upload_timeout')) + ' seconds')
+except Exception as e:
+    print('❌ Configuration error: ' + str(e))
+    sys.exit(1)
+                        "
+
+                        # Verify all required modules
+                        echo ""
+                        echo "✅ Verifying modules..."
+                        python3 -c "
+import sys
+sys.path.insert(0, 'src')
+from main import BrowserStackUploader
+from config import Config
+from logger import setup_logger
+from local_storage import LocalStorage
+from browserstack_client import BrowserStackClient
+from github_client import GitHubClient
+from yaml_updater import YAMLUpdater
+from teams_notifier import TeamsNotifier
+from utils import validate_parameters
+print('✅ All modules imported successfully')
+                        "
                     '''
                 }
             }
@@ -138,12 +214,16 @@ pipeline {
         stage('Validate Parameters') {
             steps {
                 script {
+                    echo "✔️  STAGE: Validate Parameters"
+                    echo "════════════════════════════════════════════════════════"
+
                     sh '''
-                        echo "Validating parameters..."
                         cd ${DEVOPS_REPO}
-                        
-                        # Validation using Python script
-                        python3 << 'EOF'
+                        source venv/bin/activate
+
+                        python3 -c "
+import sys
+sys.path.insert(0, 'src')
 from utils import validate_parameters
 
 params = {
@@ -156,61 +236,22 @@ params = {
     'source_build_url': '${params.SOURCE_BUILD_URL}'
 }
 
-print("\nParameter Validation:")
-print("─" * 50)
+print('Parameter Validation:')
+print('─' * 50)
 for key, value in params.items():
-    print(f"  {key:20} : {value}")
-print("─" * 50)
+    print(f'  {key:20} : {value}')
+print('─' * 50)
 
 errors = validate_parameters(params)
 if errors:
-    print("\n❌ Parameter validation FAILED:")
+    print('❌ Parameter validation FAILED:')
     for error in errors:
-        print(f"  • {error}")
-    exit(1)
+        print(f'  • {error}')
+    sys.exit(1)
 else:
-    print("\n✓ All parameters validated successfully")
-EOF
-                    '''
-                }
-            }
-        }
-
-        stage('Setup Configuration') {
-            steps {
-                script {
-                    sh '''
-                        echo "Setting up configuration..."
-                        cd ${DEVOPS_REPO}
-                        
-                        # Verify config file exists
-                        if [ ! -f config.yaml ]; then
-                            echo "❌ config.yaml not found!"
-                            exit 1
-                        fi
-                        
-                        echo "✓ config.yaml found"
-                        
-                        # Export credentials as environment variables for config substitution
-                        export BROWSERSTACK_USER="${BROWSERSTACK_USER}"
-                        export BROWSERSTACK_ACCESS_KEY="${BROWSERSTACK_ACCESS_KEY}"
-                        export GITHUB_TOKEN="${GITHUB_TOKEN}"
-                        export TEAMS_WEBHOOK_URL="${TEAMS_WEBHOOK_URL}"
-                        
-                        # Verify paths
-                        echo ""
-                        echo "Verifying artifact paths..."
-                        
-                        ARTIFACT_PATH="${ARTIFACT_BASE}/${params.PLATFORM}/${params.ENVIRONMENT}/${params.BUILD_TYPE}"
-                        
-                        if [ ! -d "$ARTIFACT_PATH" ]; then
-                            echo "⚠ Artifact directory doesn't exist yet: $ARTIFACT_PATH"
-                            echo "  This is OK during first test"
-                        else
-                            echo "✓ Artifact directory exists: $ARTIFACT_PATH"
-                            echo "  Contents:"
-                            find "$ARTIFACT_PATH" -type f | head -5
-                        fi
+    print('')
+    print('✅ All parameters validated successfully')
+                        "
                     '''
                 }
             }
@@ -219,44 +260,36 @@ EOF
         stage('Execute Upload') {
             steps {
                 script {
+                    echo "📤 STAGE: Execute BrowserStack Upload"
+                    echo "════════════════════════════════════════════════════════"
+
                     sh '''
-                        echo ""
-                        echo "════════════════════════════════════════════"
-                        echo "Executing BrowserStack Upload"
-                        echo "════════════════════════════════════════════"
-                        echo ""
-                        
                         cd ${DEVOPS_REPO}
-                        
-                        # Export credentials for config substitution
-                        export BROWSERSTACK_USER="${BROWSERSTACK_USER}"
-                        export BROWSERSTACK_ACCESS_KEY="${BROWSERSTACK_ACCESS_KEY}"
-                        export GITHUB_TOKEN="${GITHUB_TOKEN}"
-                        export TEAMS_WEBHOOK_URL="${TEAMS_WEBHOOK_URL}"
-                        
+                        source venv/bin/activate
+
                         # Run the uploader with all parameters
-                        python3 browserstack-uploader.py \\
-                          --platform "${params.PLATFORM}" \\
-                          --environment "${params.ENVIRONMENT}" \\
-                          --build-type "${params.BUILD_TYPE}" \\
-                          --app-variant "${params.APP_VARIANT}" \\
-                          --version "${params.VERSION}" \\
-                          --build-id "${params.BUILD_ID}" \\
-                          --source-build-url "${params.SOURCE_BUILD_URL}" \\
-                          --config-file config.yaml \\
-                          --output-file ${WORKSPACE_ROOT}/upload-result.json \\
-                          --verbose
-                        
+                        python3 src/main.py \
+                            --platform "${PLATFORM}" \
+                            --environment "${ENVIRONMENT}" \
+                            --build-type "${BUILD_TYPE}" \
+                            --app-variant "${APP_VARIANT}" \
+                            --version "${VERSION}" \
+                            --build-id "${BUILD_ID}" \
+                            --source-build-url "${SOURCE_BUILD_URL}" \
+                            --config-file config/config.yaml \
+                            --output-file ${WORKSPACE}/upload-result.json \
+                            --verbose
+
                         RESULT=$?
-                        
+
                         if [ $RESULT -ne 0 ]; then
                             echo ""
                             echo "❌ Upload failed with exit code: $RESULT"
                             exit 1
                         fi
-                        
+
                         echo ""
-                        echo "✓ Upload completed successfully"
+                        echo "✅ Upload completed successfully"
                     '''
                 }
             }
@@ -265,220 +298,115 @@ EOF
         stage('Archive Results') {
             steps {
                 script {
+                    echo "📁 STAGE: Archive Results"
+                    echo "════════════════════════════════════════════════════════"
+
                     sh '''
-                        echo ""
-                        echo "════════════════════════════════════════════"
-                        echo "Archiving Results"
-                        echo "════════════════════════════════════════════"
-                        echo ""
-                        
                         cd ${DEVOPS_REPO}
-                        
-                        # Copy results to workspace
-                        echo "Copying result files..."
-                        cp ${WORKSPACE_ROOT}/upload-result.json ${WORKSPACE_ROOT}/ 2>/dev/null || true
-                        
-                        # Copy audit trail files
-                        AUDIT_FILES=$(find . -name "audit-trail-*.json" -type f)
-                        if [ -n "$AUDIT_FILES" ]; then
-                            cp audit-trail-*.json ${WORKSPACE_ROOT}/ 2>/dev/null || true
-                            echo "✓ Audit trail files copied"
+
+                        # Archive upload results
+                        if [ -f ${WORKSPACE}/upload-result.json ]; then
+                            echo "Archiving upload results..."
+                            mkdir -p ${WORKSPACE}/artifacts
+                            cp ${WORKSPACE}/upload-result.json ${WORKSPACE}/artifacts/
+
+                            # Also copy audit trails if they exist
+                            find logs -name "audit-trail-*.json" -exec cp {} ${WORKSPACE}/artifacts/ \; 2>/dev/null || true
+
+                            echo "✅ Results archived"
                         fi
-                        
-                        # Display results
-                        echo ""
-                        if [ -f ${WORKSPACE_ROOT}/upload-result.json ]; then
-                            echo "════════════════════════════════════════════"
-                            echo "Upload Results"
-                            echo "════════════════════════════════════════════"
-                            python3 -m json.tool < ${WORKSPACE_ROOT}/upload-result.json | head -50
-                            
-                            # Extract key information
-                            echo ""
-                            echo "════════════════════════════════════════════"
-                            echo "Summary"
-                            echo "════════════════════════════════════════════"
-                            python3 << 'SUMMARY'
+                    '''
+
+                    // Archive artifacts in Jenkins
+                    archiveArtifacts artifacts: 'artifacts/**/*.json',
+                                     allowEmptyArchive: true,
+                                     fingerprint: true
+                }
+            }
+        }
+
+        stage('Generate Report') {
+            steps {
+                script {
+                    echo "📊 STAGE: Generate Report"
+                    echo "════════════════════════════════════════════════════════"
+
+                    sh '''
+                        if [ -f ${WORKSPACE}/upload-result.json ]; then
+                            python3 << 'EOF'
 import json
 
-with open('${WORKSPACE_ROOT}/upload-result.json', 'r') as f:
-    result = json.load(f)
+try:
+    with open('${WORKSPACE}/upload-result.json') as f:
+        result = json.load(f)
 
-print(f"Status:    {result.get('status')}")
+    print("")
+    print("╔════════════════════════════════════════════════════════╗")
+    print("║              UPLOAD RESULT SUMMARY                     ║")
+    print("╚════════════════════════════════════════════════════════╝")
+    print("")
 
-if result.get('status') == 'SUCCESS':
-    print(f"App ID:    {result.get('browserstack', {}).get('app_id', 'N/A')}")
-    print(f"PR:        {result.get('pr', {}).get('pr_url', 'N/A')}")
-    yaml_file = f"{result.get('params', {}).get('platform')}/{result.get('params', {}).get('app_variant')}.yml"
-    print(f"YAML File: {yaml_file}")
-else:
-    print(f"Error:     {result.get('error', 'Unknown error')}")
-    if 'details' in result:
-        for detail in result.get('details', []):
-            print(f"  - {detail}")
-SUMMARY
+    print(f"Status:         {result.get('status', 'N/A')}")
+    print(f"Platform:       {result.get('platform', 'N/A')}")
+    print(f"Environment:    {result.get('environment', 'N/A')}")
+    print(f"App Variant:    {result.get('app_variant', 'N/A')}")
+    print(f"Version:        {result.get('version', 'N/A')}")
+
+    if 'browserstack' in result:
+        bs = result['browserstack']
+        print(f"App ID:         {bs.get('app_id', 'N/A')}")
+        print(f"App URL:        {bs.get('app_url', 'N/A')}")
+
+    if 'pr' in result and 'pr_url' in result['pr']:
+        print(f"PR URL:         {result['pr']['pr_url']}")
+
+    print("")
+
+except Exception as e:
+    print(f"Error reading results: {e}")
+    exit(1)
+EOF
                         fi
                     '''
                 }
-                
-                // Archive artifacts for Jenkins
-                archiveArtifacts artifacts: 'upload-result.json,audit-trail-*.json',
-                                 allowEmptyArchive: true,
-                                 onlyIfSuccessful: false
             }
         }
     }
 
     post {
-        always {
-            script {
-                echo "Cleaning up..."
-                
-                // Clean up workspace in Docker container
-                sh '''
-                    echo "Removing temporary files..."
-                    rm -rf ${DEVOPS_REPO}
-                    
-                    # Keep result files in workspace
-                    ls -lh ${WORKSPACE_ROOT}/*.json 2>/dev/null | awk '{print $9}' || echo "No result files found"
-                '''
-            }
-        }
-
         success {
             script {
-                echo "✅ BrowserStack upload completed successfully"
-                
-                // Parse result JSON to extract key information
-                sh '''
-                    if [ -f ${WORKSPACE_ROOT}/upload-result.json ]; then
-                        python3 << 'EXTRACT'
-import json
-import os
-
-result_file = '${WORKSPACE_ROOT}/upload-result.json'
-
-with open(result_file, 'r') as f:
-    result = json.load(f)
-
-if result.get('status') == 'SUCCESS':
-    # Extract key information
-    app_id = result.get('browserstack', {}).get('app_id', 'N/A')
-    pr_url = result.get('pr', {}).get('pr_url', 'N/A')
-    pr_number = result.get('pr', {}).get('pr_number', 'N/A')
-    yaml_file = f"{result.get('params', {}).get('platform')}/{result.get('params', {}).get('app_variant')}.yml"
-    
-    # Write to Jenkins environment file for use in other steps
-    with open('${WORKSPACE_ROOT}/build-info.env', 'w') as f:
-        f.write(f"APP_ID={app_id}\\n")
-        f.write(f"PR_URL={pr_url}\\n")
-        f.write(f"PR_NUMBER={pr_number}\\n")
-        f.write(f"YAML_FILE={yaml_file}\\n")
-    
-    print(f"Build info exported to build-info.env")
-EXTRACT
-                    fi
-                '''
-                
-                // Update build description
-                script {
-                    try {
-                        def result = readJSON file: "${WORKSPACE}/upload-result.json"
-                        if (result.status == 'SUCCESS') {
-                            def appId = result.browserstack?.app_id ?: "N/A"
-                            def prUrl = result.pr?.pr_url ?: "N/A"
-                            def yamlFile = "${result.params?.platform}/${result.params?.app_variant}.yml"
-                            
-                            currentBuild.description = """
-Platform: ${params.PLATFORM}<br/>
-App: ${params.APP_VARIANT}<br/>
-Version: ${params.VERSION}<br/>
-YAML File: <code>${yamlFile}</code><br/>
-App ID: <code>${appId}</code><br/>
-<a href="${prUrl}">View Pull Request</a>
-"""
-                        }
-                    } catch (Exception e) {
-                        echo "Warning: Could not update build description: ${e.message}"
-                    }
-                }
+                echo ""
+                echo "✅ Pipeline completed successfully"
+                echo ""
+                echo "Next steps:"
+                echo "  1. Check the generated PR in GitHub"
+                echo "  2. Verify artifact uploaded to BrowserStack"
+                echo "  3. Review Teams notification (if configured)"
             }
         }
 
         failure {
             script {
-                echo "❌ BrowserStack upload failed"
-                
-                // Try to extract error details
-                sh '''
-                    if [ -f ${WORKSPACE_ROOT}/upload-result.json ]; then
-                        echo ""
-                        echo "Error Details:"
-                        echo "─────────────────────────────────────────────"
-                        python3 -m json.tool < ${WORKSPACE_ROOT}/upload-result.json | grep -A 20 "error"
-                    fi
-                '''
-                
-                // Update build description with error
-                script {
-                    try {
-                        def result = readJSON file: "${WORKSPACE}/upload-result.json"
-                        currentBuild.description = """
-<span style="color: red;"><b>FAILED</b></span><br/>
-Platform: ${params.PLATFORM}<br/>
-App: ${params.APP_VARIANT}<br/>
-Error: ${result.error ?: 'Unknown error'}
-"""
-                    } catch (Exception e) {
-                        echo "Warning: Could not update build description: ${e.message}"
-                    }
-                }
-                
-                // Send email notification
-                emailext(
-                    subject: "❌ BrowserStack Upload Failed - ${params.PLATFORM}/${params.APP_VARIANT}",
-                    body: """
-                    <h2>BrowserStack Upload Failed</h2>
-                    <p><b>Build:</b> <a href="${BUILD_URL}">${BUILD_NUMBER}</a></p>
-                    <p><b>Status:</b> FAILED</p>
-                    <hr/>
-                    <p><b>Parameters:</b></p>
-                    <ul>
-                        <li>Platform: ${params.PLATFORM}</li>
-                        <li>App: ${params.APP_VARIANT}</li>
-                        <li>Environment: ${params.ENVIRONMENT}</li>
-                        <li>Build Type: ${params.BUILD_TYPE}</li>
-                        <li>Version: ${params.VERSION}</li>
-                    </ul>
-                    <hr/>
-                    <p>Please check the build logs for details:</p>
-                    <p><a href="${BUILD_URL}console">${BUILD_URL}console</a></p>
-                    """,
-                    mimeType: 'text/html',
-                    to: '${DEFAULT_RECIPIENTS}',
-                    recipientProviders: [
-                        developers(),
-                        requestor(),
-                        brokenBuildSuspects()
-                    ]
-                )
+                echo ""
+                echo "❌ Pipeline failed"
+                echo ""
+                echo "Troubleshooting:"
+                echo "  1. Check console output above for errors"
+                echo "  2. Review configuration in config/config.yaml"
+                echo "  3. Verify credentials are set in Jenkins Credentials Manager"
+                echo "  4. Check logs in ${WORKSPACE}/bstack/logs"
             }
         }
 
-        unstable {
-            script {
-                echo "⚠ Build is unstable"
-            }
-        }
-
-        cleanup {
-            script {
-                // Final cleanup
-                cleanWs(
-                    deleteDirs: true,
-                    patterns: [[pattern: '/tmp/devops-browserstack-automation', type: 'INCLUDE']]
-                )
-            }
+        always {
+            // Cleanup virtual environment to save space
+            sh '''
+                echo "Cleaning up..."
+                if [ -d "${DEVOPS_REPO}/venv" ]; then
+                    rm -rf ${DEVOPS_REPO}/venv
+                fi
+            '''
         }
     }
 }
