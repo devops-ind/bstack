@@ -1,0 +1,328 @@
+// Jenkinsfile for DevOps Jenkins
+// Triggered by App Build Pipeline from Dev Jenkins
+// Purpose: BrowserStack artifact upload automation
+
+@Library('shared-library') _
+
+pipeline {
+    agent {
+        docker {
+            image 'python:3.11-slim'
+            args '-v /shared:/shared:ro'
+            reuseNode true
+        }
+    }
+
+    options {
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        disableConcurrentBuilds()
+        ansiColor('xterm')
+    }
+
+    parameters {
+        choice(
+            name: 'PLATFORM',
+            choices: ['android', 'android_hw', 'ios'],
+            description: 'Mobile platform (from app build)'
+        )
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['production', 'staging'],
+            description: 'Target environment'
+        )
+        choice(
+            name: 'BUILD_TYPE',
+            choices: ['Debug', 'Release'],
+            description: 'Build type (from app build)'
+        )
+        choice(
+            name: 'APP_VARIANT',
+            choices: ['agent', 'retail', 'wallet'],
+            description: 'Application variant (from app build)'
+        )
+        string(
+            name: 'VERSION',
+            description: 'Application version (X.Y.Z format, from app build)'
+        )
+        string(
+            name: 'BUILD_ID',
+            description: 'Source build ID from Dev Jenkins (e.g., app-build-123)'
+        )
+        string(
+            name: 'SOURCE_BUILD_URL',
+            description: 'Source build URL from Dev Jenkins'
+        )
+        string(
+            name: 'SOURCE_JENKINS_URL',
+            defaultValue: '',
+            description: 'Optional: Dev Jenkins URL for reference'
+        )
+    }
+
+    environment {
+        // Jenkins Credentials (configure in Credentials Manager)
+        BROWSERSTACK_USER = credentials('browserstack-user')
+        BROWSERSTACK_ACCESS_KEY = credentials('browserstack-access-key')
+        GITHUB_TOKEN = credentials('github-token')
+        TEAMS_WEBHOOK_URL = credentials('teams-webhook-url')
+        
+        // Paths
+        DEVOPS_REPO_DIR = "${WORKSPACE}/devops-automation"
+        ARTIFACT_BASE_PATH = '/shared/mobileapp/builds/mainline'
+        CONFIG_FILE = "${WORKSPACE}/config.yaml"
+    }
+
+    stages {
+        stage('Validate Input') {
+            steps {
+                script {
+                    echo "╔════════════════════════════════════════════════════════╗"
+                    echo "║  BrowserStack Artifact Upload - DevOps Pipeline       ║"
+                    echo "║  Triggered by: App Build Pipeline (Dev Jenkins)       ║"
+                    echo "╚════════════════════════════════════════════════════════╝"
+                    echo ""
+                    
+                    // Validate parameters
+                    if (!params.VERSION || !params.BUILD_ID) {
+                        error("❌ ERROR: VERSION and BUILD_ID parameters are required!")
+                    }
+                    
+                    // Log all parameters
+                    echo "📋 PARAMETERS RECEIVED:"
+                    echo "   Platform:         ${params.PLATFORM}"
+                    echo "   Environment:      ${params.ENVIRONMENT}"
+                    echo "   Build Type:       ${params.BUILD_TYPE}"
+                    echo "   App Variant:      ${params.APP_VARIANT}"
+                    echo "   Version:          ${params.VERSION}"
+                    echo "   Build ID:         ${params.BUILD_ID}"
+                    echo "   Source Build URL: ${params.SOURCE_BUILD_URL}"
+                    if (params.SOURCE_JENKINS_URL) {
+                        echo "   Dev Jenkins URL:  ${params.SOURCE_JENKINS_URL}"
+                    }
+                    echo ""
+                }
+            }
+        }
+
+        stage('Checkout DevOps Scripts') {
+            steps {
+                script {
+                    echo "📦 STAGE: Checkout DevOps Scripts"
+                    echo "════════════════════════════════════════════════════════"
+                    
+                    try {
+                        // Clone or pull the DevOps automation scripts
+                        dir("${env.DEVOPS_REPO_DIR}") {
+                            if (fileExists('.git')) {
+                                echo "Updating existing DevOps repository..."
+                                sh '''
+                                    git fetch origin
+                                    git checkout main
+                                    git pull origin main
+                                '''
+                            } else {
+                                echo "Cloning DevOps repository..."
+                                sh '''
+                                    mkdir -p ${DEVOPS_REPO_DIR}
+                                    cd ${DEVOPS_REPO_DIR}
+                                    # Replace with your actual DevOps repo URL
+                                    git clone https://github.com/your-org/devops-automation.git .
+                                '''
+                            }
+                        }
+                        
+                        echo "✅ DevOps scripts ready"
+                    } catch (Exception e) {
+                        error("❌ Failed to checkout DevOps scripts: ${e.message}")
+                    }
+                }
+            }
+        }
+
+        stage('Setup Python Environment') {
+            steps {
+                script {
+                    echo "🐍 STAGE: Setup Python Environment"
+                    echo "════════════════════════════════════════════════════════"
+                    
+                    sh '''
+                        cd ${DEVOPS_REPO_DIR}
+                        
+                        # Create virtual environment
+                        python3 -m venv venv
+                        source venv/bin/activate
+                        
+                        # Install dependencies
+                        pip install --upgrade pip
+                        pip install -r requirements.txt
+                        
+                        echo "✅ Python environment ready"
+                    '''
+                }
+            }
+        }
+
+        stage('Validate Configuration') {
+            steps {
+                script {
+                    echo "⚙️  STAGE: Validate Configuration"
+                    echo "════════════════════════════════════════════════════════"
+                    
+                    sh '''
+                        cd ${DEVOPS_REPO_DIR}
+                        source venv/bin/activate
+                        
+                        # Validate config.yaml syntax
+                        python3 -c "import yaml; yaml.safe_load(open('config.yaml'))"
+                        echo "✅ config.yaml is valid"
+                        
+                        # Verify all required Python modules exist
+                        python3 -c "
+from browserstack_uploader import BrowserStackUploader
+print('✅ All modules imported successfully')
+                        "
+                    '''
+                }
+            }
+        }
+
+        stage('Execute Upload') {
+            steps {
+                script {
+                    echo "📤 STAGE: Execute BrowserStack Upload"
+                    echo "════════════════════════════════════════════════════════"
+                    
+                    sh '''
+                        cd ${DEVOPS_REPO_DIR}
+                        source venv/bin/activate
+                        
+                        # Run the uploader with parameters from Dev Jenkins
+                        python3 browserstack-uploader.py \
+                            --platform "${PLATFORM}" \
+                            --environment "${ENVIRONMENT}" \
+                            --build-type "${BUILD_TYPE}" \
+                            --app-variant "${APP_VARIANT}" \
+                            --version "${VERSION}" \
+                            --build-id "${BUILD_ID}" \
+                            --source-build-url "${SOURCE_BUILD_URL}" \
+                            --config-file config.yaml \
+                            --output-file upload-result.json \
+                            --verbose
+                        
+                        echo "✅ Upload completed"
+                    '''
+                }
+            }
+        }
+
+        stage('Archive Results') {
+            steps {
+                script {
+                    echo "📁 STAGE: Archive Results"
+                    echo "════════════════════════════════════════════════════════"
+                    
+                    sh '''
+                        cd ${DEVOPS_REPO_DIR}
+                        
+                        # Archive JSON results
+                        if [ -f upload-result.json ]; then
+                            echo "Archiving upload results..."
+                            mkdir -p ${WORKSPACE}/results
+                            cp upload-result.json ${WORKSPACE}/results/
+                            cp audit-trail-*.json ${WORKSPACE}/results/ 2>/dev/null || true
+                            echo "✅ Results archived"
+                        fi
+                    '''
+                    
+                    // Archive artifacts in Jenkins
+                    archiveArtifacts artifacts: 'results/**/*.json',
+                                     allowEmptyArchive: true,
+                                     fingerprint: true
+                }
+            }
+        }
+
+        stage('Generate Report') {
+            steps {
+                script {
+                    echo "📊 STAGE: Generate Report"
+                    echo "════════════════════════════════════════════════════════"
+                    
+                    sh '''
+                        cd ${DEVOPS_REPO_DIR}
+                        
+                        if [ -f ${WORKSPACE}/results/upload-result.json ]; then
+                            echo ""
+                            echo "╔════════════════════════════════════════════════════════╗"
+                            echo "║              UPLOAD RESULT SUMMARY                     ║"
+                            echo "╚════════════════════════════════════════════════════════╝"
+                            
+                            python3 -c "
+import json
+with open('${WORKSPACE}/results/upload-result.json') as f:
+    result = json.load(f)
+    
+print(f'Status:         {result.get(\"status\", \"N/A\")}')
+print(f'Platform:       {result.get(\"platform\", \"N/A\")}')
+print(f'App Variant:    {result.get(\"app_variant\", \"N/A\")}')
+print(f'Version:        {result.get(\"version\", \"N/A\")}')
+if 'browserstack' in result:
+    bs = result['browserstack']
+    print(f'App ID:         {bs.get(\"app_id\", \"N/A\")}')
+    print(f'App URL:        {bs.get(\"app_url\", \"N/A\")}')
+if 'git' in result:
+    print(f'PR URL:         {result[\"git\"].get(\"pr_url\", \"N/A\")}')
+                            "
+                        fi
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                echo "✅ Pipeline completed successfully"
+                
+                // Optional: Send success notification
+                sh '''
+                    # You can add custom success handling here
+                    echo "Build artifact uploaded to BrowserStack successfully"
+                '''
+            }
+        }
+
+        failure {
+            script {
+                echo "❌ Pipeline failed"
+                
+                // Collect logs for debugging
+                sh '''
+                    echo "Collecting error logs..."
+                    cd ${DEVOPS_REPO_DIR}
+                    if [ -f browserstack-uploader.log ]; then
+                        tail -50 browserstack-uploader.log
+                    fi
+                '''
+            }
+        }
+
+        always {
+            // Cleanup
+            sh '''
+                echo "Cleaning up..."
+                # Optional: Clean workspace
+                # rm -rf ${WORKSPACE}/*
+            '''
+            
+            // Clean up artifacts if needed
+            cleanWs(
+                deleteDirs: true,
+                patterns: [[pattern: 'venv/**', type: 'INCLUDE']]
+            )
+        }
+    }
+}

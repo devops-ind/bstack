@@ -1,0 +1,383 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║         APP BUILD JOB CONFIGURATION - QUICK REFERENCE                          ║
+║        How to Configure App Build (Dev Jenkins) to Trigger DevOps Job         ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+
+⚡ 30-SECOND OVERVIEW
+════════════════════════════════════════════════════════════════════════════════
+
+What: Configure App Build job to trigger DevOps BrowserStack Upload job
+When: After app build completes successfully
+How: Add post-build action with parameters
+Result: Automatic artifact upload to BrowserStack
+
+
+🎯 STEP-BY-STEP APP BUILD JOB SETUP
+════════════════════════════════════════════════════════════════════════════════
+
+Step 1: Open App Build Job Configuration
+─────────────────────────────────────────────────────────────────────────────
+
+1. Login to Dev Jenkins
+2. Navigate to your App Build job
+3. Click "Configure" (or "Configure Job")
+4. Scroll to bottom
+
+
+Step 2: Add Build Parameters (if not already present)
+─────────────────────────────────────────────────────────────────────────────
+
+In "General" or "Build" section, click "Add Parameter" for each:
+
+Parameter 1: PLATFORM
+  Type: Choice Parameter
+  Name: PLATFORM
+  Choices:
+    android
+    android_hw
+    ios
+  Default: android
+
+Parameter 2: ENVIRONMENT
+  Type: Choice Parameter
+  Name: ENVIRONMENT
+  Choices:
+    staging
+    production
+  Default: staging
+
+Parameter 3: BUILD_TYPE
+  Type: Choice Parameter
+  Name: BUILD_TYPE
+  Choices:
+    Debug
+    Release
+  Default: Release
+
+Parameter 4: APP_VARIANT
+  Type: Choice Parameter
+  Name: APP_VARIANT
+  Choices:
+    agent
+    retail
+    wallet
+  Default: agent
+
+Parameter 5: VERSION
+  Type: String Parameter
+  Name: VERSION
+  Default: 1.0.0
+  Description: Semantic version (X.Y.Z)
+
+
+Step 3: Add Post-Build Action
+─────────────────────────────────────────────────────────────────────────────
+
+1. Scroll to "Post-build Actions"
+2. Click "Add post-build action"
+3. Select "Trigger parameterized build on other jobs"
+   (Or similar - exact name depends on plugin)
+
+   Alternative names:
+   - "Trigger job with parameters"
+   - "Parameterized Trigger"
+   - "Build job in other Jenkins instance"
+
+
+Step 4: Configure Trigger for Cross-Jenkins
+─────────────────────────────────────────────────────────────────────────────
+
+In the trigger configuration, fill:
+
+✎ Jenkins Instance URL:
+  http://devops-jenkins.company.com:8080/
+  (or http://your-devops-jenkins-url)
+
+✎ Jenkins Username:
+  (Leave empty if using same user directory)
+  OR your-username (if different Jenkins)
+
+✎ Jenkins API Token:
+  (Leave empty if using same user directory)
+  OR paste-your-api-token-here
+
+✎ Job to Build:
+  DevOps-BrowserStack-Upload
+
+✎ Predefined parameters:
+  Copy-paste all of these:
+  ──────────────────────────────────────────────────────────────────
+
+  PLATFORM=${PLATFORM}
+  ENVIRONMENT=${ENVIRONMENT}
+  BUILD_TYPE=${BUILD_TYPE}
+  APP_VARIANT=${APP_VARIANT}
+  VERSION=${VERSION}
+  BUILD_ID=${BUILD_NUMBER}
+  SOURCE_BUILD_URL=${BUILD_URL}
+  SOURCE_JENKINS_URL=${JENKINS_URL}
+
+  ──────────────────────────────────────────────────────────────────
+
+☑ Block until builds finish:
+  Check this box (optional but recommended)
+
+☑ Don't run job if current build is unstable:
+  Uncheck this (we want to upload even if tests fail sometimes)
+
+
+Step 5: Save Configuration
+─────────────────────────────────────────────────────────────────────────────
+
+1. Scroll to bottom
+2. Click "Save"
+3. You're done!
+
+
+🧪 TEST THE CONFIGURATION
+════════════════════════════════════════════════════════════════════════════════
+
+Test 1: Run Build Manually
+─────────────────────────────────────────────────────────────────────────────
+
+1. Click "Build with Parameters"
+2. Select values:
+   - PLATFORM: android
+   - ENVIRONMENT: staging
+   - BUILD_TYPE: Release
+   - APP_VARIANT: agent
+   - VERSION: 1.0.0
+
+3. Click "Build"
+
+4. Check console output for:
+   - Build completes
+   - Message: "Triggering job DevOps-BrowserStack-Upload"
+   - DevOps job link appears
+
+5. Navigate to DevOps Jenkins
+6. Verify job was triggered in queue/running
+
+
+Test 2: Check DevOps Job Execution
+─────────────────────────────────────────────────────────────────────────────
+
+1. Go to DevOps Jenkins
+2. Find "DevOps-BrowserStack-Upload" job
+3. Check if it was triggered
+4. Click on the build number
+5. Check console output:
+   - Should see parameters you passed
+   - Should see all 7 stages execute
+   - Should see "✅ Pipeline completed successfully" at end
+
+6. Check results:
+   - Artifacts archived
+   - upload-result.json created
+   - GitHub PR created
+   - Teams notification sent
+
+
+⚠️  TROUBLESHOOTING
+════════════════════════════════════════════════════════════════════════════════
+
+Problem: DevOps job doesn't trigger at all
+──────────────────────────────────────────────────────────────────────────────
+Solutions:
+  1. Check Jenkins URL is correct (test in browser)
+  2. Verify API token is correct (regenerate if needed)
+  3. Check firewall allows connection from Dev to DevOps Jenkins
+  4. Verify "Trigger parameterized build" plugin is installed
+  5. Check Jenkins logs: Manage Jenkins → Log → All Jenkins Logs
+
+Problem: DevOps job triggers but parameters are blank/wrong
+──────────────────────────────────────────────────────────────────────────────
+Solutions:
+  1. Check parameter names in predefined parameters (case-sensitive!)
+  2. Verify format: PARAM_NAME=${VARIABLE}
+  3. Check app build job has those parameters
+  4. Add logging to see actual values passed
+  5. Look at DevOps job console for "Parameters:"
+
+Problem: Connection refused / Authentication failed
+──────────────────────────────────────────────────────────────────────────────
+Solutions:
+  1. Test URL directly: curl -I http://devops-jenkins:8080/
+  2. Regenerate API token in Jenkins user settings
+  3. Test token: curl -u user:token http://devops-jenkins:8080/api/json
+  4. Check firewall rules
+  5. Verify network connectivity between servers
+
+Problem: Python modules not found in DevOps job
+──────────────────────────────────────────────────────────────────────────────
+Solutions:
+  1. Check DevOps repo has all Python files
+  2. Check Git clone succeeds in DevOps job
+  3. Verify requirements.txt in repo
+  4. Check pip install step in DevOps job logs
+  5. Manually test DevOps job with sample parameters
+
+
+📋 PARAMETER REFERENCE
+════════════════════════════════════════════════════════════════════════════════
+
+These are the Jenkins variables you're passing:
+
+${PLATFORM}              → The platform selected (android/android_hw/ios)
+${ENVIRONMENT}           → The environment selected (staging/production)
+${BUILD_TYPE}            → The build type (Debug/Release)
+${APP_VARIANT}           → The app variant (agent/retail/wallet)
+${VERSION}               → The version number entered (e.g., 1.0.0)
+${BUILD_NUMBER}          → Jenkins build number (auto-generated ID)
+${BUILD_URL}             → URL to the build (auto-generated)
+${JENKINS_URL}           → Dev Jenkins URL (auto-generated)
+
+
+📋 EXACT COPY-PASTE TEXT FOR PREDEFINED PARAMETERS
+════════════════════════════════════════════════════════════════════════════════
+
+Copy this entire block and paste into "Predefined parameters" field:
+
+──────────────────────────────────────────────────────────────────────────────
+PLATFORM=${PLATFORM}
+ENVIRONMENT=${ENVIRONMENT}
+BUILD_TYPE=${BUILD_TYPE}
+APP_VARIANT=${APP_VARIANT}
+VERSION=${VERSION}
+BUILD_ID=${BUILD_NUMBER}
+SOURCE_BUILD_URL=${BUILD_URL}
+SOURCE_JENKINS_URL=${JENKINS_URL}
+──────────────────────────────────────────────────────────────────────────────
+
+
+✅ VERIFICATION CHECKLIST
+════════════════════════════════════════════════════════════════════════════════
+
+Before running builds:
+  ☐ App build job has 5 parameters (PLATFORM, ENVIRONMENT, BUILD_TYPE, APP_VARIANT, VERSION)
+  ☐ Post-build action added: "Trigger parameterized builds on other jobs"
+  ☐ Jenkins Instance URL configured
+  ☐ Job name set to: DevOps-BrowserStack-Upload
+  ☐ All 8 predefined parameters copied correctly
+  ☐ "Block until builds finish" checked
+  ☐ Configuration saved
+
+After first build:
+  ☐ App build job ran successfully
+  ☐ Console shows "Triggering job DevOps-BrowserStack-Upload"
+  ☐ DevOps job was created/triggered
+  ☐ DevOps job has all correct parameters
+  ☐ DevOps job completed successfully
+  ☐ Artifacts archived in DevOps job
+  ☐ GitHub PR was created
+  ☐ Teams notification received (if configured)
+
+
+🚀 COMMON CONFIGURATIONS BY JENKINS TYPE
+════════════════════════════════════════════════════════════════════════════════
+
+FREESTYLE JOB:
+──────────────────────────────────────────────────────────────────────────────
+
+1. Edit job
+2. Post-build Actions → Add post-build action
+3. Select "Trigger parameterized build on other jobs"
+4. Configure as described above
+5. Save
+
+
+PIPELINE JOB (Declarative):
+──────────────────────────────────────────────────────────────────────────────
+
+In Jenkinsfile, add to your pipeline:
+
+    post {
+        success {
+            script {
+                build(
+                    job: 'DevOps-BrowserStack-Upload',
+                    parameters: [
+                        string(name: 'PLATFORM', value: params.PLATFORM ?: 'android'),
+                        string(name: 'ENVIRONMENT', value: params.ENVIRONMENT ?: 'staging'),
+                        string(name: 'BUILD_TYPE', value: params.BUILD_TYPE ?: 'Release'),
+                        string(name: 'APP_VARIANT', value: params.APP_VARIANT ?: 'agent'),
+                        string(name: 'VERSION', value: params.VERSION ?: '1.0.0'),
+                        string(name: 'BUILD_ID', value: env.BUILD_NUMBER),
+                        string(name: 'SOURCE_BUILD_URL', value: env.BUILD_URL),
+                        string(name: 'SOURCE_JENKINS_URL', value: env.JENKINS_URL)
+                    ],
+                    wait: true
+                )
+            }
+        }
+    }
+
+
+PIPELINE JOB (Scripted):
+──────────────────────────────────────────────────────────────────────────────
+
+node {
+    // Your build steps
+    
+    // Trigger DevOps job
+    def devopsJob = build(
+        job: 'DevOps-BrowserStack-Upload',
+        parameters: [
+            [$class: 'StringParameterValue', name: 'PLATFORM', value: params.PLATFORM],
+            [$class: 'StringParameterValue', name: 'ENVIRONMENT', value: params.ENVIRONMENT],
+            [$class: 'StringParameterValue', name: 'BUILD_TYPE', value: params.BUILD_TYPE],
+            [$class: 'StringParameterValue', name: 'APP_VARIANT', value: params.APP_VARIANT],
+            [$class: 'StringParameterValue', name: 'VERSION', value: params.VERSION],
+            [$class: 'StringParameterValue', name: 'BUILD_ID', value: env.BUILD_NUMBER],
+            [$class: 'StringParameterValue', name: 'SOURCE_BUILD_URL', value: env.BUILD_URL],
+            [$class: 'StringParameterValue', name: 'SOURCE_JENKINS_URL', value: env.JENKINS_URL]
+        ]
+    )
+}
+
+
+💡 TIPS & BEST PRACTICES
+════════════════════════════════════════════════════════════════════════════════
+
+✅ DO:
+  - Test trigger manually before automation
+  - Check DevOps Jenkins logs for any errors
+  - Use "Block until builds finish" for feedback
+  - Monitor first few automated runs
+  - Keep credentials secure (don't share API tokens)
+  - Document custom parameters you add
+
+❌ DON'T:
+  - Hardcode credentials in job configuration
+  - Put sensitive data in parameter values
+  - Skip testing before production
+  - Ignore DevOps job failures
+  - Share Jenkins URLs or tokens publicly
+
+
+🎓 NEXT STEPS
+════════════════════════════════════════════════════════════════════════════════
+
+1. Configure App Build Job (15 min)
+2. Test manually (10 min)
+3. Run full test (5 min)
+4. Document for team (10 min)
+5. Brief team on new workflow (10 min)
+6. Monitor first production runs
+7. Adjust if needed
+
+
+═════════════════════════════════════════════════════════════════════════════════
+
+QUICK HELP:
+  - Can't find "Trigger parameterized build"?
+    → Install plugin: Parameterized Trigger Plugin
+  - Don't know your Jenkins URL?
+    → Check browser address bar
+  - Can't generate API token?
+    → Jenkins User → Configure → API Token section
+  - Still stuck?
+    → Check JENKINS_CROSS_PIPELINE_SETUP.txt for detailed troubleshooting
+
+═════════════════════════════════════════════════════════════════════════════════
