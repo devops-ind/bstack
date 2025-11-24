@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+*.tmp
+*.log
+.temp/
+audit-trail-*.json
+
+# Local development
+local_config.yaml
+.env
+.env.local
+secrets.yaml
+
+# Compiled files
+*.pyc
+browserstack-uploader.cpython-*.pyc
+
+# Test outputs
+test_results/
+/test_output/

@@ -1,0 +1,74 @@
+# BrowserStack Artifact Uploader Configuration
+# Replace ${VAR_NAME} with actual values or set as environment variables
+
+browserstack:
+  username: ${BROWSERSTACK_USER}
+  access_key: ${BROWSERSTACK_ACCESS_KEY}
+  api_endpoint: "https://api-cloud.browserstack.com/app-automate/upload"
+  upload_timeout: 300
+
+local_storage:
+  artifact_base_path: "/shared/mobileapp/builds/mainline"
+  verify_path_exists: true
+  
+  # Path templates for each platform
+  path_templates:
+    android: "{base}/{platform}/{environment}/{build_type}/android/ent/{app_variant}/build/app-rel.apk"
+    android_hw: "{base}/{platform}/{environment}/{build_type}/android/ent/{app_variant}/build/app-rel.apk"
+    ios: "{base}/{platform}/{environment}/{build_type}/ios/ent/{app_variant}/build/app.ipa"
+  
+  accepted_extensions:
+    android: [".apk", ".aab"]
+    android_hw: [".apk", ".aab"]
+    ios: [".ipa"]
+
+git:
+  repo_url: "https://github.com/org/yaml-configs.git"
+  default_branch: "main"
+  user_name: "DevOps Automation"
+  user_email: "devops@company.com"
+  create_pr: true
+  pr_auto_merge: false
+
+github:
+  token: ${GITHUB_TOKEN}
+  org: "your-org"
+  repo: "yaml-configs"
+
+notifications:
+  teams:
+    webhook_url: ${TEAMS_WEBHOOK_URL}
+    mention_qa: true
+    qa_group: "QA Team"
+
+logging:
+  level: "INFO"
+  log_to_console: true
+
+yaml_structure:
+  # YAML files mapping - Direct file names in root directory
+  # Map: platform/app_variant → actual YAML file name
+  yaml_files:
+    android:
+      ag: "browserstack_ag_Android.yml"
+      re: "browserstack_re_Android.yml"
+      wallet: "browserstack_ag_Android.yml"  # Not provided, default to ag
+    android_hw:
+      ag: "browserstackhuawi_ag.yml"
+      re: "browserstackhuawi_re.yml"
+      wallet: "browserstackhuawi_ag.yml"     # Not provided, default to ag
+    ios:
+      ag: "browserstackiOS_ag.yml"
+      re: "browserstackiOS_re.yml"
+      wallet: "browserstackiOS_ag.yml"       # Not provided, default to ag
+  
+  shared_file: "shared.yml"
+  
+  # YAML paths within files
+  app_root_key: "apps"                    # apps.{app_variant}.{environment}.{build_type}
+  environment_levels: ["environment", "build_type"]
+
+retry:
+  max_attempts: 3
+  initial_delay: 2
+  backoff_factor: 2
