@@ -29,16 +29,18 @@ class LocalStorage:
     - validate_artifact(): Verify file is valid and return metadata
     """
 
-    def __init__(self, config):
+    def __init__(self, config, src_folder=None):
         """
         Initialize storage manager with configuration
 
         Args:
             config: Config object with storage settings
+            src_folder: Optional custom source folder path (overrides config)
         """
         self.config = config
         self.log = get_logger(__name__)
         self.storage_config = config.get_local_storage_config()
+        self.src_folder = src_folder
 
     def construct_artifact_path(self, platform, environment, build_type, app_variant):
         """
@@ -70,12 +72,16 @@ class LocalStorage:
         if not template:
             raise ValueError(f"No path template configured for platform: {platform}")
 
+        # Use custom src_folder if provided, otherwise use config's artifact_base_path
+        base_path = self.src_folder if self.src_folder else self.storage_config.get('artifact_base_path')
+
         # Replace placeholders in template
         artifact_path = template.format(
-            base=self.storage_config.get('artifact_base_path'),
+            base=base_path,
             platform=platform,
             environment=environment,
             build_type=build_type,
+            build_type_lower=build_type.lower(),
             app_variant=app_variant
         )
 

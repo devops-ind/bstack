@@ -21,6 +21,7 @@ Usage:
         --version 1.2.0 \\
         --build-id jenkins-1234 \\
         --source-build-url https://jenkins.example.com/job/build/123 \\
+        --src-folder "\\\\192.1.6.8\\Builds\\MobileApp\\Nightly_Builds\\mainline" \\
         --config-file ../config/config.yaml \\
         --verbose
 """
@@ -89,6 +90,7 @@ class BrowserStackUploader:
                 - version: semantic version (X.Y.Z)
                 - build_id: Jenkins build number
                 - source_build_url: Jenkins build URL
+                - src_folder: (optional) Custom source folder path for artifacts
             output_file (str): Optional JSON file for results
 
         Returns:
@@ -138,8 +140,11 @@ class BrowserStackUploader:
             self.logger.info("STEP 2: Validate & Read Artifact")
             self.logger.info("=" * 70)
 
-            # Create storage manager
-            local_storage = LocalStorage(self.config)
+            # Create storage manager with optional custom src_folder
+            src_folder = params.get('src_folder')
+            if src_folder:
+                self.logger.info(f"Using custom source folder: {src_folder}")
+            local_storage = LocalStorage(self.config, src_folder=src_folder)
 
             # Build artifact path from parameters
             artifact_path = local_storage.construct_artifact_path(
@@ -437,6 +442,7 @@ Examples:
     --version 1.2.0 \\
     --build-id jenkins-1234 \\
     --source-build-url https://jenkins.example.com/job/build/123 \\
+    --src-folder "\\\\192.1.6.8\\Builds\\MobileApp\\Nightly_Builds\\mainline" \\
     --config-file ../config/config.yaml \\
     --verbose
         """
@@ -461,6 +467,8 @@ Examples:
                         help='Build identifier (e.g., jenkins-1234)')
     parser.add_argument('--source-build-url', required=True,
                         help='Source build URL for reference')
+    parser.add_argument('--src-folder', default=None,
+                        help='Custom source folder path for artifacts (NFS location)')
     parser.add_argument('--config-file', default='config.yaml',
                         help='Configuration file path')
     parser.add_argument('--output-file', default=None,
@@ -479,7 +487,8 @@ Examples:
         'app_variant': args.app_variant,
         'version': args.version,
         'build_id': args.build_id,
-        'source_build_url': args.source_build_url
+        'source_build_url': args.source_build_url,
+        'src_folder': args.src_folder
     }
 
     # Run uploader
