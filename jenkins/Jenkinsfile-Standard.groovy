@@ -50,11 +50,6 @@ pipeline {
             description: 'Application variant'
         )
         string(
-            name: 'VERSION',
-            defaultValue: '1.0.0',
-            description: 'Application version (semantic: X.Y.Z)'
-        )
-        string(
             name: 'BUILD_ID',
             defaultValue: '${BUILD_NUMBER}',
             description: 'Build identifier'
@@ -63,6 +58,11 @@ pipeline {
             name: 'SOURCE_BUILD_URL',
             defaultValue: '${BUILD_URL}',
             description: 'Source build URL'
+        )
+        string(
+            name: 'srcFolder',
+            defaultValue: '',
+            description: 'NFS location where APK/IPA artifacts are stored (e.g., \\\\192.1.6.8\\Builds\\MobileApp\\Nightly_Builds\\mainline)'
         )
     }
 
@@ -91,9 +91,11 @@ pipeline {
                     echo "   Environment:   ${params.ENVIRONMENT}"
                     echo "   Build Type:    ${params.BUILD_TYPE}"
                     echo "   App Variant:   ${params.APP_VARIANT}"
-                    echo "   Version:       ${params.VERSION}"
                     echo "   Build ID:      ${params.BUILD_ID}"
                     echo "   Source Build:  ${params.SOURCE_BUILD_URL}"
+                    if (params.srcFolder) {
+                        echo "   Source Folder: ${params.srcFolder}"
+                    }
                     echo ""
                 }
             }
@@ -267,18 +269,27 @@ else:
                         cd ${DEVOPS_REPO}
                         source venv/bin/activate
 
-                        # Run the uploader with all parameters
-                        python3 src/main.py \
-                            --platform "${PLATFORM}" \
-                            --environment "${ENVIRONMENT}" \
-                            --build-type "${BUILD_TYPE}" \
-                            --app-variant "${APP_VARIANT}" \
-                            --version "${VERSION}" \
-                            --build-id "${BUILD_ID}" \
-                            --source-build-url "${SOURCE_BUILD_URL}" \
-                            --config-file config/config.yaml \
+                        # Build command with optional src-folder parameter
+                        CMD="python3 src/main.py \
+                            --platform \"${PLATFORM}\" \
+                            --environment \"${ENVIRONMENT}\" \
+                            --build-type \"${BUILD_TYPE}\" \
+                            --app-variant \"${APP_VARIANT}\" \
+                            --build-id \"${BUILD_ID}\" \
+                            --source-build-url \"${SOURCE_BUILD_URL}\""
+
+                        # Add src-folder if provided
+                        if [ -n "${srcFolder}" ]; then
+                            CMD="$CMD --src-folder \"${srcFolder}\""
+                        fi
+
+                        # Add remaining arguments
+                        CMD="$CMD --config-file config/config.yaml \
                             --output-file ${WORKSPACE}/upload-result.json \
-                            --verbose
+                            --verbose"
+
+                        # Run the uploader with all parameters
+                        eval $CMD
 
                         RESULT=$?
 

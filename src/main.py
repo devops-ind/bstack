@@ -18,9 +18,9 @@ Usage:
         --environment production \\
         --build-type Release \\
         --app-variant agent \\
-        --version 1.2.0 \\
         --build-id jenkins-1234 \\
         --source-build-url https://jenkins.example.com/job/build/123 \\
+        --src-folder "\\\\192.1.6.8\\Builds\\MobileApp\\Nightly_Builds\\mainline" \\
         --config-file ../config/config.yaml \\
         --verbose
 """
@@ -86,9 +86,10 @@ class BrowserStackUploader:
                 - environment: production, staging
                 - build_type: Debug, Release
                 - app_variant: agent, retail, wallet
-                - version: semantic version (X.Y.Z)
                 - build_id: Jenkins build number
                 - source_build_url: Jenkins build URL
+                - version: (optional) semantic version (X.Y.Z)
+                - src_folder: (optional) Custom source folder path for artifacts
             output_file (str): Optional JSON file for results
 
         Returns:
@@ -128,7 +129,8 @@ class BrowserStackUploader:
             self.logger.info(f"  Environment: {params['environment']}")
             self.logger.info(f"  Build Type: {params['build_type']}")
             self.logger.info(f"  App Variant: {params['app_variant']}")
-            self.logger.info(f"  Version: {params['version']}")
+            if params.get('version'):
+                self.logger.info(f"  Version: {params['version']}")
             result["steps"]["validate"] = "SUCCESS"
 
             # =========================================================
@@ -138,8 +140,11 @@ class BrowserStackUploader:
             self.logger.info("STEP 2: Validate & Read Artifact")
             self.logger.info("=" * 70)
 
-            # Create storage manager
-            local_storage = LocalStorage(self.config)
+            # Create storage manager with optional custom src_folder
+            src_folder = params.get('src_folder')
+            if src_folder:
+                self.logger.info(f"Using custom source folder: {src_folder}")
+            local_storage = LocalStorage(self.config, src_folder=src_folder)
 
             # Build artifact path from parameters
             artifact_path = local_storage.construct_artifact_path(
@@ -250,9 +255,12 @@ class BrowserStackUploader:
             commit_message = (
                 f"Update BrowserStack app ID for {params['platform']}/{params['app_variant']} "
                 f"{params['environment']} {params['build_type']}\n\n"
-                f"Build: {params['build_id']}\n"
-                f"Version: {params['version']}"
+                f"Build: {params['build_id']}"
             )
+
+            # Add version to commit message if provided
+            if params.get('version'):
+                commit_message += f"\nVersion: {params['version']}"
 
             # Commit and push
             commit_info = github.commit_and_push(
@@ -289,8 +297,13 @@ class BrowserStackUploader:
 - **Application**: {params['app_variant']}
 - **Environment**: {params['environment']}
 - **Build Type**: {params['build_type']}
-- **Version**: {params['version']}
-- **Build ID**: {params['build_id']}
+- **Build ID**: {params['build_id']}"""
+
+            # Add version if provided
+            if params.get('version'):
+                pr_body += f"\n- **Version**: {params['version']}"
+
+            pr_body += f"""
 
 ### App ID Change
 - **Old App ID**: {old_app_id}
@@ -345,7 +358,7 @@ class BrowserStackUploader:
                 app_variant=params['app_variant'],
                 environment=params['environment'],
                 build_type=params['build_type'],
-                version=params['version'],
+                version=params.get('version'),
                 old_app_id=old_app_id,
                 new_app_id=upload_result['app_id'],
                 pr_url=pr_url,
@@ -405,9 +418,15 @@ class BrowserStackUploader:
     def _generate_custom_id(self, params: Dict[str, str]) -> str:
         """Generate custom ID for BrowserStack upload"""
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-        return (f"{params['platform']}-{params['app_variant']}-"
-                f"{params['environment']}-{params['build_type']}-"
-                f"{params['version']}-{timestamp}")
+        custom_id = (f"{params['platform']}-{params['app_variant']}-"
+                     f"{params['environment']}-{params['build_type']}")
+
+        # Add version if provided
+        if params.get('version'):
+            custom_id += f"-{params['version']}"
+
+        custom_id += f"-{timestamp}"
+        return custom_id
 
     def _write_output(self, output_file: Optional[str], result: Dict[str, Any]) -> None:
         """Write result to JSON output file if specified"""
@@ -434,9 +453,9 @@ Examples:
     --environment production \\
     --build-type Release \\
     --app-variant agent \\
-    --version 1.2.0 \\
     --build-id jenkins-1234 \\
     --source-build-url https://jenkins.example.com/job/build/123 \\
+    --src-folder "\\\\192.1.6.8\\Builds\\MobileApp\\Nightly_Builds\\mainline" \\
     --config-file ../config/config.yaml \\
     --verbose
         """
@@ -455,12 +474,14 @@ Examples:
     parser.add_argument('--app-variant', required=True,
                         choices=['agent', 'retail', 'wallet'],
                         help='Application variant')
-    parser.add_argument('--version', required=True,
-                        help='Application version (semantic: X.Y.Z)')
+    parser.add_argument('--version', default=None,
+                        help='Application version (optional, semantic: X.Y.Z)')
     parser.add_argument('--build-id', required=True,
                         help='Build identifier (e.g., jenkins-1234)')
     parser.add_argument('--source-build-url', required=True,
                         help='Source build URL for reference')
+    parser.add_argument('--src-folder', default=None,
+                        help='Custom source folder path for artifacts (NFS location)')
     parser.add_argument('--config-file', default='config.yaml',
                         help='Configuration file path')
     parser.add_argument('--output-file', default=None,
@@ -479,7 +500,8 @@ Examples:
         'app_variant': args.app_variant,
         'version': args.version,
         'build_id': args.build_id,
-        'source_build_url': args.source_build_url
+        'source_build_url': args.source_build_url,
+        'src_folder': args.src_folder
     }
 
     # Run uploader

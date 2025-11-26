@@ -50,16 +50,17 @@ pipeline {
             description: 'Application variant (from app build)'
         )
         string(
-            name: 'VERSION',
-            description: 'Application version (X.Y.Z format, from app build)'
-        )
-        string(
             name: 'BUILD_ID',
             description: 'Source build ID from Dev Jenkins (e.g., app-build-123)'
         )
         string(
             name: 'SOURCE_BUILD_URL',
             description: 'Source build URL from Dev Jenkins'
+        )
+        string(
+            name: 'srcFolder',
+            defaultValue: '',
+            description: 'NFS location where APK/IPA artifacts are stored (e.g., \\\\192.1.6.8\\Builds\\MobileApp\\Nightly_Builds\\mainline)'
         )
         string(
             name: 'SOURCE_JENKINS_URL',
@@ -92,19 +93,21 @@ pipeline {
                     echo ""
                     
                     // Validate parameters
-                    if (!params.VERSION || !params.BUILD_ID) {
-                        error("❌ ERROR: VERSION and BUILD_ID parameters are required!")
+                    if (!params.BUILD_ID) {
+                        error("❌ ERROR: BUILD_ID parameter is required!")
                     }
-                    
+
                     // Log all parameters
                     echo "📋 PARAMETERS RECEIVED:"
                     echo "   Platform:         ${params.PLATFORM}"
                     echo "   Environment:      ${params.ENVIRONMENT}"
                     echo "   Build Type:       ${params.BUILD_TYPE}"
                     echo "   App Variant:      ${params.APP_VARIANT}"
-                    echo "   Version:          ${params.VERSION}"
                     echo "   Build ID:         ${params.BUILD_ID}"
                     echo "   Source Build URL: ${params.SOURCE_BUILD_URL}"
+                    if (params.srcFolder) {
+                        echo "   Source Folder:    ${params.srcFolder}"
+                    }
                     if (params.SOURCE_JENKINS_URL) {
                         echo "   Dev Jenkins URL:  ${params.SOURCE_JENKINS_URL}"
                     }
@@ -212,18 +215,27 @@ print('✅ All modules imported successfully')
                         cd ${DEVOPS_REPO_DIR}
                         source venv/bin/activate
 
-                        # Run the uploader with parameters from Dev Jenkins
-                        python3 src/main.py \
-                            --platform "${PLATFORM}" \
-                            --environment "${ENVIRONMENT}" \
-                            --build-type "${BUILD_TYPE}" \
-                            --app-variant "${APP_VARIANT}" \
-                            --version "${VERSION}" \
-                            --build-id "${BUILD_ID}" \
-                            --source-build-url "${SOURCE_BUILD_URL}" \
-                            --config-file config/config.yaml \
+                        # Build command with optional src-folder parameter
+                        CMD="python3 src/main.py \
+                            --platform \"${PLATFORM}\" \
+                            --environment \"${ENVIRONMENT}\" \
+                            --build-type \"${BUILD_TYPE}\" \
+                            --app-variant \"${APP_VARIANT}\" \
+                            --build-id \"${BUILD_ID}\" \
+                            --source-build-url \"${SOURCE_BUILD_URL}\""
+
+                        # Add src-folder if provided
+                        if [ -n "${srcFolder}" ]; then
+                            CMD="$CMD --src-folder \"${srcFolder}\""
+                        fi
+
+                        # Add remaining arguments
+                        CMD="$CMD --config-file config/config.yaml \
                             --output-file upload-result.json \
-                            --verbose
+                            --verbose"
+
+                        # Run the uploader with parameters from Dev Jenkins
+                        eval $CMD
 
                         echo "✅ Upload completed"
                     '''

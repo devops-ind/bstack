@@ -91,7 +91,7 @@ class YAMLUpdater:
             environment (str): production or staging
             build_type (str): Debug or Release
             new_app_id (str): New app ID from BrowserStack
-            version (str): App version number
+            version (str): App version number (optional, can be None)
             build_id (str): Build identifier
 
         Returns:
@@ -200,7 +200,7 @@ class YAMLUpdater:
             environment (str): Production or staging
             build_type (str): Debug or Release
             new_app_id (str): New app ID from BrowserStack
-            version (str): App version
+            version (str): App version (optional, can be None)
             build_id (str): Build identifier
             timestamp (str): ISO format timestamp
         """
@@ -233,15 +233,20 @@ class YAMLUpdater:
             content['apps'][app_variant][environment][build_type] = {}
 
         # Update the app ID and metadata
-        content['apps'][app_variant][environment][build_type] = {
+        app_data = {
             'app_id': new_app_id,
             'app_url': new_app_id,
-            'version': version,
             'build_id': build_id,
             'build_type': build_type,
             'environment': environment,
             'updated_at': timestamp
         }
+
+        # Add version only if provided
+        if version:
+            app_data['version'] = version
+
+        content['apps'][app_variant][environment][build_type] = app_data
 
         # Write updated content back to file
         self._write_yaml_file(yaml_file, content)

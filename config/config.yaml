@@ -10,13 +10,14 @@ browserstack:
 local_storage:
   artifact_base_path: "/shared/mobileapp/builds/mainline"
   verify_path_exists: true
-  
-  # Path templates for each platform
+
+  # Path templates for each platform (matching NFS structure)
+  # Note: {build_type_lower} will be automatically converted to lowercase
   path_templates:
-    android: "{base}/{platform}/{environment}/{build_type}/android/ent/{app_variant}/build/app-rel.apk"
-    android_hw: "{base}/{platform}/{environment}/{build_type}/android/ent/{app_variant}/build/app-rel.apk"
-    ios: "{base}/{platform}/{environment}/{build_type}/ios/ent/{app_variant}/build/app.ipa"
-  
+    android: "{base}/{platform}/{environment}/{build_type}/Android/enterprise/{app_variant}/build/app-{build_type_lower}.apk"
+    android_hw: "{base}/{platform}/{environment}/{build_type}/Android/enterprise/{app_variant}/build/app-{build_type_lower}.apk"
+    ios: "{base}/{platform}/{environment}/{build_type}/Ios/enterprise/{app_variant}/App.ipa"
+
   accepted_extensions:
     android: [".apk", ".aab"]
     android_hw: [".apk", ".aab"]

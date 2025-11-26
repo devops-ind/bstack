@@ -103,6 +103,69 @@ class TeamsNotifier:
             self.log.error(f"Failed to send Teams notification: {e}")
             return False
 
+    def _build_facts(self, platform, app_variant, environment, build_type,
+                     version, yaml_file, old_app_id, new_app_id, timestamp):
+        """
+        Build facts array for Teams card
+
+        Args:
+            platform, app_variant, environment, build_type: Build info
+            version: App version (optional)
+            yaml_file: YAML file path
+            old_app_id, new_app_id: App ID change info
+            timestamp: Update timestamp
+
+        Returns:
+            list: Facts array for Adaptive Card
+        """
+        facts = [
+            {
+                "name": "Platform:",
+                "value": f"`{platform}`"
+            },
+            {
+                "name": "Application:",
+                "value": f"`{app_variant}`"
+            },
+            {
+                "name": "Environment:",
+                "value": f"`{environment}`"
+            },
+            {
+                "name": "Build Type:",
+                "value": f"`{build_type}`"
+            }
+        ]
+
+        # Add version only if provided
+        if version:
+            facts.append({
+                "name": "Version:",
+                "value": f"`{version}`"
+            })
+
+        # Add remaining facts
+        facts.extend([
+            {
+                "name": "YAML File:",
+                "value": f"`{yaml_file}`"
+            },
+            {
+                "name": "Old App ID:",
+                "value": f"`{old_app_id if old_app_id else 'N/A'}`"
+            },
+            {
+                "name": "New App ID:",
+                "value": f"```{new_app_id}```"
+            },
+            {
+                "name": "Updated At:",
+                "value": timestamp
+            }
+        ])
+
+        return facts
+
     def _create_adaptive_card(self, platform, app_variant, environment, build_type,
                              version, old_app_id, new_app_id, pr_url, source_build_url,
                              yaml_file):
@@ -142,44 +205,17 @@ class TeamsNotifier:
                 {
                     "activityTitle": f"{platform_emoji} BrowserStack Update - {app_variant}",
                     "activitySubtitle": f"{environment.upper()} | {build_type}",
-                    "facts": [
-                        {
-                            "name": "Platform:",
-                            "value": f"`{platform}`"
-                        },
-                        {
-                            "name": "Application:",
-                            "value": f"`{app_variant}`"
-                        },
-                        {
-                            "name": "Environment:",
-                            "value": f"`{environment}`"
-                        },
-                        {
-                            "name": "Build Type:",
-                            "value": f"`{build_type}`"
-                        },
-                        {
-                            "name": "Version:",
-                            "value": f"`{version}`"
-                        },
-                        {
-                            "name": "YAML File:",
-                            "value": f"`{yaml_file}`"
-                        },
-                        {
-                            "name": "Old App ID:",
-                            "value": f"`{old_app_id if old_app_id else 'N/A'}`"
-                        },
-                        {
-                            "name": "New App ID:",
-                            "value": f"```{new_app_id}```"
-                        },
-                        {
-                            "name": "Updated At:",
-                            "value": timestamp
-                        }
-                    ]
+                    "facts": self._build_facts(
+                        platform=platform,
+                        app_variant=app_variant,
+                        environment=environment,
+                        build_type=build_type,
+                        version=version,
+                        yaml_file=yaml_file,
+                        old_app_id=old_app_id,
+                        new_app_id=new_app_id,
+                        timestamp=timestamp
+                    )
                 }
             ],
             # Action buttons at bottom of card
