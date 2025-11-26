@@ -50,11 +50,6 @@ pipeline {
             description: 'Application variant'
         )
         string(
-            name: 'VERSION',
-            defaultValue: '1.0.0',
-            description: 'Application version (semantic: X.Y.Z)'
-        )
-        string(
             name: 'BUILD_ID',
             defaultValue: '${BUILD_NUMBER}',
             description: 'Build identifier'
@@ -96,7 +91,6 @@ pipeline {
                     echo "   Environment:   ${params.ENVIRONMENT}"
                     echo "   Build Type:    ${params.BUILD_TYPE}"
                     echo "   App Variant:   ${params.APP_VARIANT}"
-                    echo "   Version:       ${params.VERSION}"
                     echo "   Build ID:      ${params.BUILD_ID}"
                     echo "   Source Build:  ${params.SOURCE_BUILD_URL}"
                     if (params.srcFolder) {
@@ -281,7 +275,6 @@ else:
                             --environment \"${ENVIRONMENT}\" \
                             --build-type \"${BUILD_TYPE}\" \
                             --app-variant \"${APP_VARIANT}\" \
-                            --version \"${VERSION}\" \
                             --build-id \"${BUILD_ID}\" \
                             --source-build-url \"${SOURCE_BUILD_URL}\""
 
