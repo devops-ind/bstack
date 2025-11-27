@@ -303,9 +303,11 @@ class GitHubClient:
 
     def clone_and_prepare_branch(self, platform, app_variant, build_id):
         """
-        Clone repository and create a feature branch
+        Clone repository and prepare branch based on workflow configuration
 
-        Convenience method that combines clone + create_branch
+        Supports two workflows:
+        1. PR workflow (create_pr: true): Creates feature branch
+        2. Direct commit (create_pr: false): Checks out target branch
 
         Args:
             platform (str): android, android_hw, or ios
@@ -313,21 +315,67 @@ class GitHubClient:
             build_id (str): Build identifier
 
         Returns:
-            dict: Repository info (clone_path, branch)
+            dict: Repository info (clone_path, branch, create_pr)
         """
         # Clone repository
         clone_path = self.clone_repository()
 
-        # Create branch name from parameters
-        branch_name = f"browserstack-update/{platform}/{app_variant}/{build_id}"
+        # Check workflow configuration
+        create_pr = self.git_config.get('create_pr', True)
 
-        # Create branch
-        self.create_branch(clone_path, branch_name)
+        if create_pr:
+            # Create feature branch for PR workflow
+            branch_name = f"browserstack-update/{platform}/{app_variant}/{build_id}"
+            self.create_branch(clone_path, branch_name)
+            self.log.info(f"Created feature branch: {branch_name}")
+        else:
+            # Checkout target branch for direct commit workflow
+            branch_name = self.git_config.get('target_branch', 'main')
+            self._checkout_existing_branch(clone_path, branch_name)
+            self.log.info(f"Checked out target branch: {branch_name}")
 
         return {
             'clone_path': clone_path,
-            'branch': branch_name
+            'branch': branch_name,
+            'create_pr': create_pr
         }
+
+    def _checkout_existing_branch(self, repo_path, branch_name):
+        """
+        Checkout an existing branch and pull latest changes
+
+        This is used for direct commit workflow.
+
+        Args:
+            repo_path (Path): Path to repository
+            branch_name (str): Branch to checkout
+        """
+        self.log.info(f"Checking out existing branch: {branch_name}")
+
+        try:
+            # Fetch latest changes
+            self._run_git_command(
+                ['git', 'fetch', 'origin'],
+                cwd=str(repo_path)
+            )
+
+            # Checkout the branch
+            self._run_git_command(
+                ['git', 'checkout', branch_name],
+                cwd=str(repo_path)
+            )
+
+            # Pull latest changes
+            self._run_git_command(
+                ['git', 'pull', 'origin', branch_name],
+                cwd=str(repo_path)
+            )
+
+            self.log.info(f"Branch checked out and updated: {branch_name}")
+
+        except subprocess.CalledProcessError as e:
+            self.log.error(f"Failed to checkout branch: {e.stderr}")
+            raise
 
     def _run_git_command(self, cmd, cwd, capture=False):
         """
