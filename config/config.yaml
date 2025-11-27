@@ -28,7 +28,16 @@ git:
   default_branch: "main"
   user_name: "DevOps Automation"
   user_email: "devops@company.com"
+
+  # Git workflow options:
+  # If create_pr = true: Creates feature branch, commits, and creates PR
+  # If create_pr = false: Commits directly to target_branch (no PR)
   create_pr: true
+
+  # Target branch for direct commits (only used when create_pr = false)
+  # When create_pr = true, feature branches are always created from default_branch
+  target_branch: "main"
+
   pr_auto_merge: false
 
 github:

@@ -187,6 +187,22 @@ create_git_branch(
 - Running multiple git commands
 - Error handling for subprocess calls
 
+#### `checkout_existing_branch(repo_path, branch_name)`
+**What it does**: Checks out an existing branch and pulls latest changes
+
+```python
+checkout_existing_branch(
+    repo_path='/tmp/yaml-config-abc123',
+    branch_name='main'
+)
+```
+
+**Key Concepts**:
+- Fetching remote changes
+- Checking out existing branch
+- Pulling latest updates
+- Used for direct commits to main
+
 #### `commit_and_push(...)`
 **What it does**: Commits changes and pushes to remote
 
@@ -379,6 +395,37 @@ result = run_upload_workflow(
 ---
 
 ## 🚀 How to Use
+
+### Workflow Modes
+
+The script supports **two workflows** based on config settings:
+
+#### Mode 1: Create Pull Request (Default)
+Set in `config.yaml`:
+```yaml
+git:
+  create_pr: true
+```
+
+This will:
+1. Create a feature branch
+2. Commit changes
+3. Push to GitHub
+4. Create a Pull Request for review
+
+#### Mode 2: Direct Commit to Main
+Set in `config.yaml`:
+```yaml
+git:
+  create_pr: false
+  target_branch: "main"  # Branch to commit to
+```
+
+This will:
+1. Checkout target branch (e.g., main)
+2. Commit changes directly
+3. Push to GitHub
+4. Skip PR creation
 
 ### Basic Usage
 
