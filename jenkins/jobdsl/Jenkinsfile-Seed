@@ -1,0 +1,211 @@
+/**
+ * Seed Job Jenkinsfile
+ *
+ * This Jenkinsfile runs the JobDSL script to create/update Jenkins jobs.
+ * Use this as an alternative to creating a freestyle seed job.
+ *
+ * Setup:
+ * 1. Create a Pipeline job in Jenkins named "seed-browserstack-uploader"
+ * 2. Configure it to use this Jenkinsfile from SCM
+ * 3. Run the job to create/update the multi-branch pipeline
+ *
+ * The seed job will:
+ * - Clone this repository
+ * - Execute the JobDSL script
+ * - Create/update the BrowserStack uploader multi-branch pipeline
+ */
+
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        timeout(time: 10, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        ansiColor('xterm')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "╔════════════════════════════════════════════════════════╗"
+                    echo "║        Seed Job - BrowserStack Uploader JobDSL        ║"
+                    echo "╚════════════════════════════════════════════════════════╝"
+                    echo ""
+                    echo "📦 Checking out repository..."
+                }
+
+                // Checkout the repository containing DSL scripts
+                checkout scm
+            }
+        }
+
+        stage('Validate DSL Scripts') {
+            steps {
+                script {
+                    echo ""
+                    echo "✓ STAGE: Validate JobDSL Scripts"
+                    echo "════════════════════════════════════════════════════════"
+
+                    // Check if DSL script exists
+                    def dslScript = 'jenkins/jobdsl/browserstack-uploader-multibranch.groovy'
+                    if (!fileExists(dslScript)) {
+                        error("❌ DSL script not found: ${dslScript}")
+                    }
+
+                    echo "✅ DSL script found: ${dslScript}"
+
+                    // Display script info
+                    def scriptSize = sh(
+                        script: "wc -l < ${dslScript}",
+                        returnStdout: true
+                    ).trim()
+
+                    echo "   Lines: ${scriptSize}"
+                    echo "   Path:  ${pwd()}/${dslScript}"
+                }
+            }
+        }
+
+        stage('Process JobDSL') {
+            steps {
+                script {
+                    echo ""
+                    echo "🚀 STAGE: Process JobDSL Script"
+                    echo "════════════════════════════════════════════════════════"
+                }
+
+                // Process the JobDSL script
+                jobDsl(
+                    targets: 'jenkins/jobdsl/browserstack-uploader-multibranch.groovy',
+                    removedJobAction: 'DELETE',
+                    removedViewAction: 'DELETE',
+                    removedConfigFilesAction: 'DELETE',
+                    lookupStrategy: 'SEED_JOB',
+                    additionalClasspath: '',
+                    failOnMissingPlugin: true,
+                    failOnSeedCollision: false,
+                    unstableOnDeprecation: false,
+                    sandbox: false  // Set to true if you want sandboxed execution
+                )
+
+                script {
+                    echo ""
+                    echo "✅ JobDSL processing completed"
+                }
+            }
+        }
+
+        stage('Verify Jobs Created') {
+            steps {
+                script {
+                    echo ""
+                    echo "🔍 STAGE: Verify Job Creation"
+                    echo "════════════════════════════════════════════════════════"
+
+                    // List of expected jobs
+                    def expectedJobs = [
+                        'Mobile-DevOps/browserstack-uploader',
+                        'Mobile-DevOps/browserstack-manual-upload'
+                    ]
+
+                    echo "Expected jobs to be created:"
+                    expectedJobs.each { job ->
+                        echo "  • ${job}"
+                    }
+
+                    echo ""
+                    echo "✅ Job creation verification complete"
+                    echo "   Check Jenkins UI to confirm jobs were created"
+                }
+            }
+        }
+
+        stage('Display Next Steps') {
+            steps {
+                script {
+                    echo ""
+                    echo "╔════════════════════════════════════════════════════════════════════════════╗"
+                    echo "║                        Seed Job Completed Successfully                     ║"
+                    echo "╚════════════════════════════════════════════════════════════════════════════╝"
+                    echo ""
+                    echo "📋 NEXT STEPS:"
+                    echo ""
+                    echo "1️⃣  Verify Jobs Created:"
+                    echo "   • Go to Jenkins Dashboard"
+                    echo "   • Navigate to: Mobile-DevOps folder"
+                    echo "   • Confirm these jobs exist:"
+                    echo "     - browserstack-uploader (multi-branch pipeline)"
+                    echo "     - browserstack-manual-upload (freestyle job)"
+                    echo ""
+                    echo "2️⃣  Configure Credentials (if not already done):"
+                    echo "   • Manage Jenkins → Manage Credentials → System → Global"
+                    echo "   • Add these credentials:"
+                    echo "     - browserstack-user (Secret text)"
+                    echo "     - browserstack-access-key (Secret text)"
+                    echo "     - github-token (Secret text)"
+                    echo "     - github-credentials (Username/Password or SSH)"
+                    echo "     - teams-webhook-url (Secret text, optional)"
+                    echo ""
+                    echo "3️⃣  Configure GitHub Webhook (optional but recommended):"
+                    echo "   • GitHub Repository → Settings → Webhooks → Add webhook"
+                    echo "   • Payload URL: ${env.JENKINS_URL}github-webhook/"
+                    echo "   • Content type: application/json"
+                    echo "   • Events: Just the push event"
+                    echo ""
+                    echo "4️⃣  Initial Branch Scan:"
+                    echo "   • Go to: Mobile-DevOps/browserstack-uploader"
+                    echo "   • Click: 'Scan Repository Now'"
+                    echo "   • Wait for branch discovery to complete"
+                    echo ""
+                    echo "5️⃣  Test the Pipeline:"
+                    echo "   • Select a branch (e.g., main)"
+                    echo "   • Click: 'Build with Parameters'"
+                    echo "   • Fill in parameters and click 'Build'"
+                    echo ""
+                    echo "📚 Documentation:"
+                    echo "   • JobDSL Guide:    jenkins/jobdsl/README.md"
+                    echo "   • Jenkins Guide:   jenkins/README.md"
+                    echo "   • Jenkinsfile:     jenkins/Jenkinsfile-DevOps-TriggerReady"
+                    echo ""
+                    echo "════════════════════════════════════════════════════════════════════════════"
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                echo ""
+                echo "✅ Seed job completed successfully!"
+                echo ""
+
+                // Optional: Send notification
+                // Can integrate with Teams, Slack, email, etc.
+            }
+        }
+
+        failure {
+            script {
+                echo ""
+                echo "❌ Seed job failed!"
+                echo ""
+                echo "Common issues:"
+                echo "  • Job DSL plugin not installed"
+                echo "  • Script security approval needed"
+                echo "  • Invalid DSL syntax"
+                echo ""
+                echo "Check console output above for specific error details."
+            }
+        }
+
+        always {
+            script {
+                echo ""
+                echo "Seed job execution completed at: ${new Date()}"
+            }
+        }
+    }
+}
