@@ -7,6 +7,21 @@ browserstack:
   api_endpoint: "https://api-cloud.browserstack.com/app-automate/upload"
   upload_timeout: 300
 
+  # SSL/TLS Configuration for Corporate Networks
+  # =============================================
+  # If you're behind a corporate proxy with SSL inspection, configure these settings:
+
+  # Option 1: Use custom CA certificate bundle (RECOMMENDED)
+  # Set this to the path of your corporate CA certificate file
+  # To get your corporate CA cert, see docs/SSL_CERTIFICATE_SETUP.md
+  # Example: "/path/to/corporate-ca-bundle.crt"
+  ssl_ca_bundle: null  # Set to certificate path or null to use system default
+
+  # Option 2: Disable SSL verification (NOT RECOMMENDED - security risk!)
+  # Only use this for testing/debugging in secure networks
+  # Set to false to disable SSL certificate verification
+  ssl_verify: true  # true (verify certs) or false (skip verification)
+
 local_storage:
   artifact_base_path: "/shared/mobileapp/builds/mainline"
   verify_path_exists: true

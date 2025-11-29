@@ -29,6 +29,7 @@ import yaml
 import hashlib
 import argparse
 import requests
+import urllib3
 import subprocess
 import tempfile
 from pathlib import Path
@@ -262,6 +263,24 @@ def upload_to_browserstack(config, artifact_path, custom_id):
     api_endpoint = config['browserstack']['api_endpoint']
     timeout = config['browserstack']['upload_timeout']
 
+    # Get SSL configuration (for corporate networks)
+    ssl_verify = config['browserstack'].get('ssl_verify', True)
+    ssl_ca_bundle = config['browserstack'].get('ssl_ca_bundle', None)
+
+    # Log SSL configuration
+    if not ssl_verify:
+        print("⚠️  WARNING: SSL certificate verification is DISABLED - this is a security risk!")
+        # Suppress InsecureRequestWarning
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    elif ssl_ca_bundle:
+        print(f"🔒 Using custom CA bundle: {ssl_ca_bundle}")
+
+    # Determine SSL verification settings
+    if ssl_ca_bundle:
+        verify = ssl_ca_bundle  # Use custom CA bundle
+    else:
+        verify = ssl_verify  # Use True/False
+
     try:
         # Open file in binary mode
         with open(artifact_path, 'rb') as f:
@@ -275,7 +294,8 @@ def upload_to_browserstack(config, artifact_path, custom_id):
                 files=files,
                 data=data,
                 auth=(username, access_key),  # Basic authentication
-                timeout=timeout
+                timeout=timeout,
+                verify=verify  # SSL certificate verification
             )
 
             # Check if request was successful

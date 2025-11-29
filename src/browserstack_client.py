@@ -14,6 +14,7 @@ Key Concepts:
 
 import requests
 import time
+import urllib3
 from logger import get_logger
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -50,6 +51,18 @@ class BrowserStackClient:
             'https://api-cloud.browserstack.com/app-automate/upload'
         )
         self.upload_timeout = bs_config.get('upload_timeout', 300)
+
+        # SSL/TLS settings for corporate networks
+        self.ssl_verify = bs_config.get('ssl_verify', True)
+        self.ssl_ca_bundle = bs_config.get('ssl_ca_bundle', None)
+
+        # Log SSL configuration
+        if not self.ssl_verify:
+            self.log.warning("⚠️  SSL certificate verification is DISABLED - this is a security risk!")
+            # Suppress InsecureRequestWarning when SSL verification is disabled
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        elif self.ssl_ca_bundle:
+            self.log.info(f"Using custom CA bundle: {self.ssl_ca_bundle}")
 
         # Create HTTP session with retry logic
         self.session = self._create_session()
@@ -131,13 +144,21 @@ class BrowserStackClient:
                 if environment:
                     self.log.debug(f"Environment: {environment}")
 
+                # Determine SSL verification settings
+                # Priority: ssl_ca_bundle > ssl_verify
+                if self.ssl_ca_bundle:
+                    verify = self.ssl_ca_bundle  # Use custom CA bundle
+                else:
+                    verify = self.ssl_verify  # Use True/False
+
                 # Send POST request to BrowserStack API
                 response = self.session.post(
                     self.api_endpoint,
                     files=files,
                     data=data,
                     auth=(self.username, self.access_key),  # Basic auth
-                    timeout=self.upload_timeout  # 5 minute timeout
+                    timeout=self.upload_timeout,  # 5 minute timeout
+                    verify=verify  # SSL certificate verification
                 )
 
                 # Raise error if HTTP status is not 2xx
@@ -206,11 +227,18 @@ class BrowserStackClient:
             # Build endpoint URL
             endpoint = f"{self.api_endpoint}/{app_id_clean}"
 
+            # Determine SSL verification settings
+            if self.ssl_ca_bundle:
+                verify = self.ssl_ca_bundle
+            else:
+                verify = self.ssl_verify
+
             # Send GET request
             response = self.session.get(
                 endpoint,
                 auth=(self.username, self.access_key),
-                timeout=30
+                timeout=30,
+                verify=verify
             )
 
             response.raise_for_status()
@@ -245,11 +273,18 @@ class BrowserStackClient:
             # Build endpoint URL
             endpoint = f"{self.api_endpoint}/{app_id_clean}"
 
+            # Determine SSL verification settings
+            if self.ssl_ca_bundle:
+                verify = self.ssl_ca_bundle
+            else:
+                verify = self.ssl_verify
+
             # Send DELETE request
             response = self.session.delete(
                 endpoint,
                 auth=(self.username, self.access_key),
-                timeout=30
+                timeout=30,
+                verify=verify
             )
 
             response.raise_for_status()

@@ -143,7 +143,9 @@ class Config:
             'username': self.get_required('browserstack.username'),
             'access_key': self.get_required('browserstack.access_key'),
             'api_endpoint': self.get('browserstack.api_endpoint'),
-            'upload_timeout': self.get('browserstack.upload_timeout', 300)
+            'upload_timeout': self.get('browserstack.upload_timeout', 300),
+            'ssl_verify': self.get('browserstack.ssl_verify', True),
+            'ssl_ca_bundle': self.get('browserstack.ssl_ca_bundle', None)
         }
 
     def get_git_config(self):
